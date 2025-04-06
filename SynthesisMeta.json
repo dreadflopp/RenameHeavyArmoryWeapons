@@ -1,0 +1,11 @@
+{
+  "Nickname": "RenameHeavyArmoryWeapons",
+  "Visibility": "Visible",
+  "OneLineDescription": "Renames Heavy Armory weapons and updates vanilla perk descriptions to better reflect new weapon types",
+  "LongDescription": "A patcher for Heavy Armory that helps distinguish its weapons from other mods like Animated Armoury and Skyrim Spear Mechanic.\n\n1. Renames Heavy Armory weapons:\n- 'Spear' to 'Half pike'\n- 'Halberd' to 'Poleaxe'\n\nThis renaming helps avoid confusion when using multiple weapon mods together.\n\n2. Updates vanilla perk descriptions to include references to:\n- Polearms alongside greatswords\n- Spears and claws with one-handed weapons\n- Claws with daggers\n\nBoth features can be toggled independently in settings.",
+  "PreferredAutoVersioning": "Default",
+  "RequiredMods": [
+    "PrvtI_HeavyArmory.esp"
+  ],
+  "TargetedReleases": []
+}
