@@ -23,7 +23,18 @@ namespace RenameHeavyArmoryWeapons
             { "Halberd", "Poleaxe" },
             { "Halberds", "Poleaxes" },
             { "halberd", "poleaxe" },
-            { "halberds", "poleaxes" }
+            { "halberds", "poleaxes" },
+
+            { "Quarterstaff", "Shortstaff" },
+            { "Quarterstaffs", "Shortstaffs" },
+            { "quarterstaff", "shortstaff" },
+            { "quarterstaffs", "shortstaffs" },
+
+            // Blades weapons - reordered to process longer names first
+            { "Dai-Katana", "Greatsword" },
+            { "Wakizashi", "Shortsword" },
+            { "Katana", "Sword" },
+            { "Tanto", "Dagger" }
         };
 
         // Add this new dictionary after the existing NameReplacements dictionary
@@ -62,8 +73,15 @@ namespace RenameHeavyArmoryWeapons
             if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(word))
                 return false;
 
-            var words = source.Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
-            return words.Any(w => w.Equals(word, StringComparison.Ordinal));
+            // For hyphenated words, treat them as a single unit
+            if (word.Contains("-"))
+            {
+                return source.Contains(word, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // For non-hyphenated words, split and check each word
+            var words = source.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return words.Any(w => w.Equals(word, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string ReplaceOnce(string? text, List<KeyValuePair<string, string>> replacements)
@@ -124,55 +142,101 @@ namespace RenameHeavyArmoryWeapons
 
             try
             {
-                // Rename weapons if enabled
-                if (_settings.Value.RenameWeapons)
-                {
-                    // Get all weapons from Heavy Armory plugins
-                    var heavyArmoryWeapons = state.LoadOrder.PriorityOrder
-                        .WinningOverrides<IWeaponGetter>()
-                        .Where(weapon => 
-                            weapon.FormKey.ModKey.FileName.String.StartsWith("PrvtI_HA", StringComparison.OrdinalIgnoreCase) ||
-                            weapon.FormKey.ModKey.FileName.String.StartsWith("PrvtI_HeavyArmory", StringComparison.OrdinalIgnoreCase) ||
-                            weapon.FormKey.ModKey.FileName.String.StartsWith("prvti_heavyarmory", StringComparison.OrdinalIgnoreCase));
+                // Log plugin status from settings
+                Console.WriteLine("\nChecking plugins from settings:");
+                var targetPlugins = _settings.Value.TargetPlugins
+                    .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .ToList();
 
-                    foreach (var weaponGetter in heavyArmoryWeapons)
+                foreach (var plugin in targetPlugins)
+                {
+                    if (state.LoadOrder.ContainsKey(ModKey.FromFileName(plugin)))
                     {
-                        if (string.IsNullOrEmpty(weaponGetter.Name?.String))
+                        Console.WriteLine($"Found plugin: {plugin}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Warning: Plugin not found in load order: {plugin}");
+                    }
+                }
+                Console.WriteLine(); // Empty line for readability
+
+                // Get all weapons from target plugins AND vanilla weapons they override
+                var vanillaOverrides = state.LoadOrder.PriorityOrder
+                    .Where(mod => targetPlugins.Contains(mod.ModKey.FileName.String))
+                    .SelectMany(mod => mod.Mod?.Weapons.Records ?? Enumerable.Empty<IWeaponGetter>())
+                    .Where(w => w.FormKey.ModKey.FileName.String == "Skyrim.esm")
+                    .Select(w => w.FormKey)
+                    .ToHashSet();
+
+                var targetWeapons = state.LoadOrder.PriorityOrder
+                    .WinningOverrides<IWeaponGetter>()
+                    .Where(weapon => 
+                        targetPlugins.Contains(weapon.FormKey.ModKey.FileName.String, StringComparer.OrdinalIgnoreCase) || // Original weapons from our plugins
+                        (weapon.FormKey.ModKey.FileName.String == "Skyrim.esm" && // Vanilla weapons
+                         vanillaOverrides.Contains(weapon.FormKey))); // That are overridden by our target plugins
+
+                Console.WriteLine("\nStarting weapon renaming...");
+                foreach (var weaponGetter in targetWeapons)
+                {
+                    if (string.IsNullOrEmpty(weaponGetter.Name?.String))
+                        continue;
+
+                    string originalName = weaponGetter.Name!.String;
+                    string newName = originalName;
+
+                    // Check if the weapon name contains any of our target strings as whole words
+                    foreach (var replacement in NameReplacements)
+                    {
+                        // Skip replacements based on settings
+                        if (!_settings.Value.RenameSpears && (replacement.Key.Contains("Spear") || replacement.Key.Contains("spear")))
+                            continue;
+                        if (!_settings.Value.RenameHalberds && (replacement.Key.Contains("Halberd") || replacement.Key.Contains("halberd")))
+                            continue;
+                        if (!_settings.Value.RenameQuarterstaffs && (replacement.Key.Contains("Quarterstaff") || replacement.Key.Contains("quarterstaff")))
+                            continue;
+                        if (!_settings.Value.RenameBladesSwords && (
+                            replacement.Key.Contains("Katana") || 
+                            replacement.Key.Contains("Wakizashi") || 
+                            replacement.Key.Contains("Tanto") ||
+                            replacement.Key.Contains("Dai-Katana")))
                             continue;
 
-                        string originalName = weaponGetter.Name!.String;
-                        string newName = originalName;
-
-                        // Check if the weapon name contains any of our target strings as whole words
-                        foreach (var replacement in NameReplacements)
+                        if (ContainsWord(originalName, replacement.Key))
                         {
-                            if (ContainsWord(originalName, replacement.Key))
+                            // Handle hyphenated replacements differently
+                            if (replacement.Key.Contains("-"))
                             {
-                                // Split the name into words and replace only exact matches
-                                var words = originalName.Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+                                newName = originalName.Replace(replacement.Key, replacement.Value, StringComparison.OrdinalIgnoreCase);
+                            }
+                            else
+                            {
+                                // Split only on spaces for non-hyphenated words
+                                var words = originalName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                                 for (int i = 0; i < words.Length; i++)
                                 {
-                                    if (words[i].Equals(replacement.Key, StringComparison.Ordinal))
+                                    if (words[i].Equals(replacement.Key, StringComparison.OrdinalIgnoreCase))
                                     {
                                         words[i] = replacement.Value;
                                     }
                                 }
                                 newName = string.Join(" ", words);
-                                break;
                             }
-                        }
-
-                        // Only create an override if we actually changed the name
-                        if (newName != originalName)
-                        {
-                            var weapon = state.PatchMod.Weapons.GetOrAddAsOverride(weaponGetter);
-                            weapon.Name = newName;
-                            weaponsChanged++;
-                            Console.WriteLine($"Renamed: {originalName} -> {newName}");
+                            break;
                         }
                     }
-                    Console.WriteLine($"Finished renaming weapons. Total weapons renamed: {weaponsChanged}");
+
+                    // Only create an override if we actually changed the name
+                    if (newName != originalName)
+                    {
+                        var weapon = state.PatchMod.Weapons.GetOrAddAsOverride(weaponGetter);
+                        weapon.Name = newName;
+                        weaponsChanged++;
+                        Console.WriteLine($"Renamed: {originalName} -> {newName}");
+                    }
                 }
+                Console.WriteLine($"Finished renaming weapons. Total weapons renamed: {weaponsChanged}");
 
                 // Update perk descriptions if enabled
                 if (_settings.Value.UpdatePerkDescriptions)

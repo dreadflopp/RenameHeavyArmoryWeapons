@@ -1,0 +1,42 @@
+# Build artifacts
+bin/
+obj/
+
+# VS Code settings
+.vscode/
+
+# NuGet packages
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+
+# Dotnet CLI
+*.dll
+*.exe
+*.pdb
+*.app
+*.log
+
+# Build outputs
+publish/
+out/
+
+# User-specific files
+*.user
+*.suo
+
+# Crash reports
+*.stackdump
+mono_crash.*
+
+# OS-specific junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.swp
+*.tmp
+
+# Rider or JetBrains IDEs (if you ever switch)
+.idea/
